@@ -12,6 +12,7 @@ To start the server:
 """
 
 import asyncio
+import logging
 import os
 import shutil
 import subprocess
@@ -19,6 +20,8 @@ import subprocess
 from dedalus_mcp import MCPServer
 
 from src.tools import tools
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,28 +31,33 @@ server = MCPServer(
 
 
 def _ensure_defuddle() -> None:
-    """Install the defuddle npm package locally if it isn't already available."""
+    """Try to install the defuddle npm package. Non-fatal if it fails."""
     local_bin = os.path.join(PROJECT_ROOT, "node_modules", ".bin", "defuddle")
     if os.path.isfile(local_bin) or shutil.which("defuddle"):
         return
 
     npm = shutil.which("npm")
     if not npm:
-        raise RuntimeError("npm not found — install Node.js >= 18")
+        logger.warning("npm not found — defuddle CLI won't be available until Node.js is installed")
+        return
 
-    subprocess.run(
-        [npm, "install", "--save", "defuddle"],
-        cwd=PROJECT_ROOT,
-        check=True,
-        capture_output=True,
-    )
+    try:
+        subprocess.run(
+            [npm, "install", "--save", "defuddle"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+        )
+    except Exception as e:
+        logger.warning("Failed to install defuddle: %s", e)
 
 
 async def main() -> None:
     _ensure_defuddle()
     for tool_func in tools:
         server.collect(tool_func)
-    await server.serve(port=8080)
+    port = int(os.environ.get("PORT", "8080"))
+    await server.serve(port=port)
 
 
 if __name__ == "__main__":
