@@ -1,7 +1,8 @@
-# Node / CLI build artifacts
+# Node — defuddle is auto-installed on first server start
 node_modules/
-dist/
+package.json
 package-lock.json
+dist/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

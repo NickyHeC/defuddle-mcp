@@ -19,8 +19,9 @@ Requires **Python >= 3.10** and **Node.js >= 18**.
 
 ```bash
 uv sync
-npm install
 ```
+
+The defuddle npm package is installed automatically on first server start.
 
 ## Run
 
