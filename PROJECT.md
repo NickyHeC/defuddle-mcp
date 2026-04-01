@@ -10,97 +10,103 @@
 
 ## Platform Overview
 
-**Platform name:**
-**Official docs:** (link to API documentation homepage)
-**Base URL:** (e.g. `https://api.example.com/v1`)
+**Platform name:** Defuddle
+**Official docs:** https://github.com/kepano/defuddle
+**Base URL:** N/A — defuddle is a local CLI/library, not a remote API.
 
-Brief description of what this platform does and why we are building an MCP server for it:
+Defuddle extracts the main content from web pages by removing clutter like
+ads, sidebars, headers, footers, comments, and other non-essential elements.
+It returns cleaned HTML or Markdown along with metadata (title, author,
+description, etc.). It was created for Obsidian Web Clipper but runs in any
+environment.
 
-
+We are building an MCP server so that AI agents can use defuddle to read and
+understand web pages — fetching a URL and getting back clean, structured
+content instead of raw noisy HTML.
 
 ---
 
 ## Authentication
 
-**Auth type:** (API Key / OAuth / Bearer Token / Bot Token / other)
-**How to obtain credentials:** (link to developer portal, app registration page, etc.)
+**Auth type:** No Auth
 
-### Credential details
-
-- **Token / key name:** (e.g. `GITHUB_TOKEN`, `LINEAR_ACCESS_TOKEN`)
-- **Header format:** (e.g. `Bearer {api_key}`, `token {api_key}`, `Bot {api_key}`)
-- **Scopes required:** (list each scope on its own line)
-
-### OAuth-specific (skip if using API Key)
-
-- **Authorize URL:**
-- **Token URL:**
-- **Client ID:** (store in `.env`, reference here by variable name only)
-- **Client Secret:** (store in `.env`, reference here by variable name only)
-- **Available scopes:**
-
-### Example authenticated request
-
-```
-(paste a curl or Python example showing how a request is made with this credential)
-```
+Defuddle is a local tool — it runs as a CLI process on the same machine as the
+MCP server. No API keys, tokens, or OAuth flows are needed.
 
 ---
 
 ## Endpoints / Features to Implement
 
-List the API endpoints or features you plan to expose as MCP tools.
-For each, note the HTTP method, path, key parameters, and response shape.
+Defuddle is invoked via its CLI. The MCP server exposes two tools that wrap it:
 
-| Tool name | Method | Path | Description |
-|-----------|--------|------|-------------|
-|           |        |      |             |
-|           |        |      |             |
-|           |        |      |             |
+| Tool name       | CLI command                              | Description                                           |
+|-----------------|------------------------------------------|-------------------------------------------------------|
+| `defuddle_url`  | `defuddle parse <url> --json [--markdown]` | Fetch a URL and extract its main content             |
+| `defuddle_html` | `defuddle parse <file> --json [--markdown]` | Parse raw HTML (written to a temp file) and extract content |
+
+### CLI flags used
+
+- `--json` / `-j` — Output as JSON with metadata and content
+- `--markdown` / `-m` — Convert content to Markdown format
+- `--property <name>` / `-p` — Extract a specific property (not exposed as a tool)
+- `--debug` — Enable debug mode (not exposed)
 
 ---
 
 ## Rate Limits and Restrictions
 
-- **Rate limit:** (e.g. 100 requests/minute)
-- **Retry strategy:** (e.g. exponential backoff, respect `Retry-After` header)
-- **Other restrictions:** (e.g. IP allowlisting, webhook requirements)
+- **Rate limit:** None — defuddle runs locally.
+- **Network:** The CLI fetches URLs over HTTP, so network access is required
+  for the `defuddle_url` tool but not for `defuddle_html`.
+- **Dependencies:** Requires Node.js >= 18 and the `defuddle` npm package.
 
 ---
 
 ## Response Format Notes
 
-Describe the general shape of API responses — JSON structure, pagination style,
-error format, etc. Paste a representative example if helpful.
+When invoked with `--json`, defuddle returns a JSON object:
 
 ```json
-
+{
+  "title": "Article Title",
+  "author": "Author Name",
+  "description": "A summary of the article",
+  "domain": "example.com",
+  "favicon": "https://example.com/favicon.ico",
+  "image": "https://example.com/hero.jpg",
+  "language": "en",
+  "published": "2025-01-15",
+  "site": "Example Site",
+  "content": "<p>Cleaned HTML or Markdown content...</p>",
+  "wordCount": 1234,
+  "parseTime": 42
+}
 ```
+
+When `--markdown` is combined with `--json`, the `content` field contains
+Markdown instead of HTML.
 
 ---
 
 ## Token / Credential Notes
 
-Notes on token lifecycle, expiry, rotation, or platform-specific quirks:
-
-- (e.g. "Tokens expire after 45 days of inactivity")
-- (e.g. "Token permissions auto-downgrade if unused")
-- (e.g. "Requires IP allowlisting for write tokens")
+N/A — no credentials required.
 
 ---
 
 ## Additional References
 
-- (link to OpenAPI spec, SDK docs, tutorials, etc.)
-- (link to platform's MCP/AI integration page if one exists)
-- (link to any community resources or examples)
+- [Defuddle GitHub repo](https://github.com/kepano/defuddle)
+- [Defuddle npm package](https://www.npmjs.com/package/defuddle)
+- [Obsidian Web Clipper](https://obsidian.md/clipper) (the project defuddle was created for)
 
 ---
 
 ## Notes for README
 
-Bullet points to include in the project README when it is written:
-
--
--
--
+- MCP server wrapping defuddle for AI-agent-friendly web content extraction
+- Two tools: `defuddle_url` (parse a URL) and `defuddle_html` (parse raw HTML)
+- No authentication required — defuddle runs locally
+- Returns structured metadata (title, author, description, etc.) plus clean content
+- Supports Markdown and HTML output formats
+- Requires Node.js >= 18 and the defuddle npm package

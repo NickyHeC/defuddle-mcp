@@ -23,14 +23,15 @@
   "author": "Dedalus Labs",
   "license": "MIT",
   "dependencies": {
-    "prompts": "^2.4.2",
-    "picocolors": "^1.1.1"
+    "defuddle": "^0.15.0",
+    "picocolors": "^1.1.1",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
-    "@types/prompts": "^2.4.9",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "tsx": "^4.19.0"
+    "@types/prompts": "^2.4.9",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   },
   "files": [
     "dist",
