@@ -1,49 +1,6 @@
 {
-  "name": "create-dmcp",
-  "version": "0.1.0",
-  "description": "Scaffold a Dedalus MCP server in seconds",
-  "type": "module",
-  "bin": {
-    "create-dmcp": "dist/index.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsx cli/index.ts",
-    "prepublishOnly": "npm run build"
-  },
-  "keywords": [
-    "mcp",
-    "dedalus",
-    "dmcp",
-    "model-context-protocol",
-    "dauth",
-    "scaffold",
-    "cli"
-  ],
-  "author": "Dedalus Labs",
-  "license": "MIT",
+  "private": true,
   "dependencies": {
-    "defuddle": "^0.15.0",
-    "picocolors": "^1.1.1",
-    "prompts": "^2.4.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/prompts": "^2.4.9",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
-  },
-  "files": [
-    "dist",
-    "src-no-auth",
-    "src-api-key",
-    "src-oauth",
-    "pyproject.toml",
-    "PROJECT.md",
-    ".env.example",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=18.0.0"
+    "defuddle": "^0.15.0"
   }
 }
