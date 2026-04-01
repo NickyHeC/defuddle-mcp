@@ -7,6 +7,11 @@ dependencies = [
     "dedalus-mcp",
     "pydantic",
     "python-dotenv",
+    "httpx",
+    "readability-lxml",
+    "markdownify",
+    "beautifulsoup4",
+    "lxml",
 ]
 
 [project.optional-dependencies]

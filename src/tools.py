@@ -1,18 +1,21 @@
 """Defuddle tools.
 
-Uses the defuddle CLI (https://github.com/kepano/defuddle) to extract
-main content from web pages. Requires Node.js >= 18 and the defuddle
-npm package (install globally with `npm install -g defuddle`).
+Extracts main content from web pages using pure Python libraries:
+- readability-lxml for content extraction (Mozilla Readability port)
+- markdownify for HTML-to-Markdown conversion
+- beautifulsoup4 for metadata extraction
+- httpx for async HTTP fetching
 """
 
-import asyncio
-import json
-import os
-import shutil
-import tempfile
+import time
+from urllib.parse import urlparse
 
+import httpx
+from bs4 import BeautifulSoup
 from dedalus_mcp import tool
+from markdownify import markdownify as md
 from pydantic import BaseModel
+from readability import Document
 
 
 class DefuddleResult(BaseModel):
@@ -32,68 +35,106 @@ class DefuddleResult(BaseModel):
     parse_time_ms: float = 0
 
 
-def _find_defuddle_bin() -> list[str]:
-    """Resolve the defuddle CLI binary, preferring a local install."""
-    local_bin = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "node_modules", ".bin", "defuddle",
-    )
-    if os.path.isfile(local_bin):
-        return [local_bin]
+def _extract_metadata(soup: BeautifulSoup, url: str | None = None) -> dict:
+    """Pull metadata from <meta> tags, <title>, and structured data."""
 
-    if shutil.which("defuddle"):
-        return ["defuddle"]
+    def meta(name: str) -> str:
+        tag = (
+            soup.find("meta", attrs={"property": name})
+            or soup.find("meta", attrs={"name": name})
+        )
+        return (tag.get("content", "") if tag else "").strip()
 
-    npx = shutil.which("npx")
-    if npx:
-        return [npx, "defuddle"]
-
-    raise RuntimeError(
-        "defuddle CLI not found. Install it with: npm install -g defuddle"
+    title = (
+        meta("og:title")
+        or meta("twitter:title")
+        or (soup.title.string.strip() if soup.title and soup.title.string else "")
     )
 
+    author = (
+        meta("author")
+        or meta("article:author")
+        or meta("twitter:creator")
+    )
 
-async def _run_defuddle(target: str, *, markdown: bool = True) -> dict:
-    """Run the defuddle CLI and return parsed JSON output."""
-    bin_cmd = _find_defuddle_bin()
-    args = [*bin_cmd, "parse", target, "--json"]
+    description = (
+        meta("og:description")
+        or meta("description")
+        or meta("twitter:description")
+    )
+
+    image = meta("og:image") or meta("twitter:image")
+    language = meta("og:locale") or ""
+    if not language:
+        html_tag = soup.find("html")
+        if html_tag:
+            language = html_tag.get("lang", "")
+
+    published = (
+        meta("article:published_time")
+        or meta("date")
+        or meta("pubdate")
+    )
+
+    site = meta("og:site_name") or ""
+    domain = ""
+    favicon = ""
+    if url:
+        parsed = urlparse(url)
+        domain = parsed.netloc
+        favicon = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+
+    return {
+        "title": title,
+        "author": author,
+        "description": description,
+        "domain": domain,
+        "favicon": favicon,
+        "image": image,
+        "language": language,
+        "published": published,
+        "site": site,
+    }
+
+
+def _parse_html(html: str, *, markdown: bool = True, url: str | None = None) -> DefuddleResult:
+    """Extract main content and metadata from raw HTML."""
+    start = time.perf_counter()
+
+    soup = BeautifulSoup(html, "lxml")
+    metadata = _extract_metadata(soup, url)
+
+    doc = Document(html)
+    article_html = doc.summary()
+
+    if not metadata["title"]:
+        metadata["title"] = doc.short_title() or doc.title() or ""
+
     if markdown:
-        args.append("--markdown")
+        content = md(article_html, heading_style="ATX", strip=["img"]).strip()
+    else:
+        content = article_html
 
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
+    word_count = len(content.split())
+    elapsed = (time.perf_counter() - start) * 1000
 
-    if proc.returncode != 0:
-        err = stderr.decode().strip() or f"defuddle exited with code {proc.returncode}"
-        raise RuntimeError(err)
-
-    return json.loads(stdout.decode())
-
-
-def _to_result(data: dict) -> DefuddleResult:
     return DefuddleResult(
-        title=data.get("title") or "",
-        author=data.get("author") or "",
-        description=data.get("description") or "",
-        domain=data.get("domain") or "",
-        favicon=data.get("favicon") or "",
-        image=data.get("image") or "",
-        language=data.get("language") or "",
-        published=data.get("published") or "",
-        site=data.get("site") or "",
-        content=data.get("content") or "",
-        word_count=data.get("wordCount") or 0,
-        parse_time_ms=data.get("parseTime") or 0,
+        **metadata,
+        content=content,
+        word_count=word_count,
+        parse_time_ms=round(elapsed, 2),
     )
 
 
-@tool(description="Extract the main content from a web page URL. Returns cleaned Markdown (or HTML) with metadata such as title, author, and description. Removes clutter like ads, sidebars, headers, and footers.")
+@tool(
+    description=(
+        "Extract the main content from a web page URL. Returns cleaned "
+        "Markdown (or HTML) with metadata such as title, author, and "
+        "description. Removes clutter like ads, sidebars, headers, and footers."
+    ),
+)
 async def defuddle_url(url: str, markdown: bool = True) -> DefuddleResult:
-    """Fetch a URL and extract its main content using defuddle.
+    """Fetch a URL and extract its main content.
 
     Args:
         url: The URL of the web page to parse.
@@ -101,15 +142,28 @@ async def defuddle_url(url: str, markdown: bool = True) -> DefuddleResult:
 
     """
     try:
-        data = await _run_defuddle(url, markdown=markdown)
-        return _to_result(data)
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            resp = await client.get(url, headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; DefuddleMCP/1.0; "
+                    "+https://github.com/kepano/defuddle)"
+                ),
+            })
+            resp.raise_for_status()
+        return _parse_html(resp.text, markdown=markdown, url=url)
     except Exception as e:
         return DefuddleResult(success=False, error=str(e))
 
 
-@tool(description="Extract the main content from raw HTML. Returns cleaned Markdown (or HTML) with metadata. Useful when you already have page HTML and want to extract the readable content.")
+@tool(
+    description=(
+        "Extract the main content from raw HTML. Returns cleaned Markdown "
+        "(or HTML) with metadata. Useful when you already have page HTML "
+        "and want to extract the readable content."
+    ),
+)
 async def defuddle_html(html: str, markdown: bool = True) -> DefuddleResult:
-    """Parse raw HTML and extract its main content using defuddle.
+    """Parse raw HTML and extract its main content.
 
     Args:
         html: Raw HTML content to parse.
@@ -117,14 +171,7 @@ async def defuddle_html(html: str, markdown: bool = True) -> DefuddleResult:
 
     """
     try:
-        fd, tmp_path = tempfile.mkstemp(suffix=".html")
-        try:
-            with os.fdopen(fd, "w") as f:
-                f.write(html)
-            data = await _run_defuddle(tmp_path, markdown=markdown)
-            return _to_result(data)
-        finally:
-            os.unlink(tmp_path)
+        return _parse_html(html, markdown=markdown)
     except Exception as e:
         return DefuddleResult(success=False, error=str(e))
 
